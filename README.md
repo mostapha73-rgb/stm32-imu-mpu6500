@@ -31,6 +31,8 @@ Acquérir les mesures d'une centrale inertielle, les convertir en unités physiq
 | Bus | I2C1 à 100 kHz, adressage 7 bits |
 | Outils | STM32CubeMX, STM32CubeIDE 2.2 (HAL ST, débogage SWD par ST-LINK), PulseView + analyseur logique 8 voies |
 
+<img src="docs/photos/01_carte_stm32f407g_disc1.jpg" alt="Carte STM32F407G-DISC1" width="320">
+
 ## Câblage
 
 | Capteur | STM32F407 | Connecteur Discovery |
@@ -41,6 +43,27 @@ Acquérir les mesures d'une centrale inertielle, les convertir en unités physiq
 | SDA | PB7 (I2C1_SDA) | P2 broche 24 |
 | INT | PC2 (EXTI2, front montant) | P1 broche 10 |
 | AD0 | GND (adresse `0x68`) | – |
+
+### Montage
+
+<table>
+<tr>
+<td width="50%"><img src="docs/photos/02_cablage_mpu_breadboard.jpg" alt="Câblage du module MPU sur la plaque d'essai"></td>
+<td width="50%"><img src="docs/photos/03_capteur_detecte_ld4.jpg" alt="Carte alimentée, LD4 verte allumée"></td>
+</tr>
+<tr>
+<td>Câblage du module sur plaque d'essai (avant l'ajout du fil INT).</td>
+<td>Capteur détecté : la LED verte LD4 bascule à chaque lecture réussie.</td>
+</tr>
+<tr>
+<td><img src="docs/photos/04_debogage_live_expressions.jpg" alt="Session de débogage avec les mesures brutes dans Live Expressions"></td>
+<td><img src="docs/photos/05_poste_de_travail.jpg" alt="Poste de travail : STM32CubeIDE et la carte"></td>
+</tr>
+<tr>
+<td>Session de débogage : programme flashé, mesures <code>imu_raw</code> suivies dans Live Expressions.</td>
+<td>Poste de travail : STM32CubeIDE et la carte en cours de test.</td>
+</tr>
+</table>
 
 ## Architecture logicielle
 
