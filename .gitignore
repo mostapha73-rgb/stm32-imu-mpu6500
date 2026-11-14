@@ -1,0 +1,21 @@
+# Sorties de compilation STM32CubeIDE
+**/Debug/
+**/Release/
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+
+# Configurations de lancement locales (numéro de sonde ST-LINK, chemins)
+*.launch
+*Debug.cfg
+
+# Fichiers système / IDE
+.DS_Store
+.osx.project
+.metadata/
