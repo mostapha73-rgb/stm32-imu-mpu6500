@@ -102,7 +102,7 @@ int main(void)
   MX_SPI1_Init();
   MX_USB_HOST_Init();
   /* USER CODE BEGIN 2 */
-  App_Init(&hi2c1);
+  App_Init(&hi2c1);              /* detection et configuration du capteur (une seule fois) */
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -113,9 +113,7 @@ int main(void)
     MX_USB_HOST_Process();
 
     /* USER CODE BEGIN 3 */
-
-    App_Run();
-
+    App_Run();                     /* lecture du capteur toutes les 50 ms (non bloquant) */
   }
   /* USER CODE END 3 */
 }
@@ -391,6 +389,7 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_SET);   /* orange fixe : erreur fatale */
   __disable_irq();
   while (1)
   {

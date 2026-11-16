@@ -3,48 +3,89 @@
  *
  *  Created on: 3 nov. 2026
  *      Author: mostapha
+ *
+ *  Application : lit le capteur toutes les APP_PERIOD_MS et signale l'etat par les LEDs.
+ *
+ *    LD4 (verte) clignote      : mesures lues normalement
+ *    LD5 (rouge) allumee fixe  : capteur absent ou mal configure au demarrage
+ *    LD5 (rouge) clignote      : erreurs de lecture en cours de fonctionnement
  */
 
-#include "main.h"
 #include "app.h"
 #include "imu.h"
 
-static uint8_t imu_ok = 0;
-static I2C_HandleTypeDef *imu_bus = NULL;   /* bus memorise pour App_Run */
-static volatile IMU_Raw_t   imu_raw;        /* dernieres mesures brutes   */
-static volatile IMU_donne_t imu_donne;      /* mesures en g, deg/s, degC  */
+/* ---------- Reglages ---------- */
+#define APP_PERIOD_MS       50      /* une lecture toutes les 50 ms (20 par seconde) */
+#define APP_BOOT_DELAY_MS   100     /* attente du demarrage du capteur               */
+
+/* ---------- LEDs (noms fonctionnels plutot que numeros) ---------- */
+#define LED_OK_PORT         LD4_GPIO_Port   /* verte */
+#define LED_OK_PIN          LD4_Pin
+#define LED_ERR_PORT        LD5_GPIO_Port   /* rouge */
+#define LED_ERR_PIN         LD5_Pin
+
+/* ---------- Etat interne de l'application ---------- */
+static I2C_HandleTypeDef *imu_bus       = NULL;   /* bus I2C memorise par App_Init      */
+static uint8_t            imu_ok        = 0;      /* 1 = capteur detecte et configure   */
+static uint32_t           app_last_tick = 0;      /* instant de la derniere lecture (ms) */
+
+/* ---------- A observer dans Live Expressions ---------- */
+static volatile IMU_Raw_t   imu_raw;              /* brut                   */
+static volatile IMU_donne_t imu_donne;            /* g, degC, deg/s         */
+static volatile IMU_milli_t imu_milli;            /* mg, milli-degC, mdeg/s */
+static volatile uint32_t    app_nb_mesures = 0;   /* lectures reussies      */
+static volatile uint32_t    app_nb_erreurs = 0;   /* lectures echouees      */
 
 void App_Init(I2C_HandleTypeDef *bus)
 {
     imu_bus = bus;
 
-    HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin | LD5_Pin, GPIO_PIN_RESET);
-    HAL_Delay(100);                          /* demarrage du capteur */
+    HAL_GPIO_WritePin(LED_OK_PORT,  LED_OK_PIN,  GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_ERR_PORT, LED_ERR_PIN, GPIO_PIN_RESET);
 
-    if (IMU_Init(bus) == HAL_OK &&
-        (IMU_GetWhoAmI() == 0x68 || IMU_GetWhoAmI() == 0x70))
-        imu_ok = 1;                          /* MPU-6050 (0x68) ou MPU-6500 (0x70) */
+    HAL_Delay(APP_BOOT_DELAY_MS);
+
+    imu_ok = (IMU_Init(imu_bus) == HAL_OK);
+
+    if (!imu_ok)
+        HAL_GPIO_WritePin(LED_ERR_PORT, LED_ERR_PIN, GPIO_PIN_SET);   /* rouge fixe */
+
+    app_last_tick = HAL_GetTick();
 }
 
 void App_Run(void)
 {
-    if (imu_ok && IMU_ReadRaw(imu_bus, (IMU_Raw_t *)&imu_raw) == HAL_OK)
-    {
-        /* Conversion : brut -> unites physiques */
-        imu_donne.ax   = imu_raw.ax / IMU_ACCEL_LSB_PER_G;
-        imu_donne.ay   = imu_raw.ay / IMU_ACCEL_LSB_PER_G;
-        imu_donne.az   = imu_raw.az / IMU_ACCEL_LSB_PER_G;
-        imu_donne.temp = imu_raw.temp / IMU_TEMP_LSB_PER_DEGC + IMU_TEMP_OFFSET_DEGC;
-        imu_donne.gx   = imu_raw.gx / IMU_GYRO_LSB_PER_DPS;
-        imu_donne.gy   = imu_raw.gy / IMU_GYRO_LSB_PER_DPS;
-        imu_donne.gz   = imu_raw.gz / IMU_GYRO_LSB_PER_DPS;
+    IMU_Raw_t   raw;       /* copies de travail locales */
+    IMU_donne_t donne;
+    IMU_milli_t milli;
 
-        HAL_GPIO_TogglePin(LD4_GPIO_Port, LD4_Pin);   /* verte : mesure lue */
-    }
-    else
+    /* 1) Capteur absent : rien a faire (la LED rouge reste allumee) */
+    if (!imu_ok)
+        return;
+
+    /* 2) Cadencement non bloquant : on ne lit que toutes les APP_PERIOD_MS.
+          Contrairement a HAL_Delay, la boucle de main.c continue de tourner. */
+    if ((HAL_GetTick() - app_last_tick) < APP_PERIOD_MS)
+        return;
+    app_last_tick = HAL_GetTick();
+
+    /* 3) Lecture */
+    if (IMU_ReadRaw(imu_bus, &raw) != HAL_OK)
     {
-        HAL_GPIO_TogglePin(LD5_GPIO_Port, LD5_Pin);   /* rouge : erreur */
+        app_nb_erreurs++;
+        HAL_GPIO_TogglePin(LED_ERR_PORT, LED_ERR_PIN);   /* rouge clignote : erreur */
+        return;
     }
 
-    HAL_Delay(50);                                    /* ~20 lectures par seconde */
+    /* 4) Conversions */
+    IMU_Convert(&raw, &donne);         /* brut -> g, degC, deg/s */
+    IMU_ToMilli(&donne, &milli);       /* -> entiers x1000       */
+
+    /* 5) Publication pour le debogueur */
+    imu_raw   = raw;
+    imu_donne = donne;
+    imu_milli = milli;
+    app_nb_mesures++;
+
+    HAL_GPIO_TogglePin(LED_OK_PORT, LED_OK_PIN);         /* verte clignote : OK */
 }
