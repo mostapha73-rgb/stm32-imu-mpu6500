@@ -81,9 +81,9 @@ flowchart TD
 
 | Fichier | Rôle |
 |---|---|
-| [`Core/Src/imu.c`](firmware/IMU_Project/Core/Src/imu.c) | Pilote : identification, réveil, configuration, lecture en rafale des 14 octets de mesures |
-| [`Core/Inc/imu.h`](firmware/IMU_Project/Core/Inc/imu.h) | Registres, facteurs de conversion, types `IMU_Raw_t` / `IMU_donne_t`, prototypes |
-| [`Core/Src/app.c`](firmware/IMU_Project/Core/Src/app.c) | Application : détection du capteur, lecture périodique, conversion en g, °/s, °C, LEDs d'état |
+| [`Core/Src/imu.c`](firmware/IMU_Project/Core/Src/imu.c) | Pilote : identification, reset, configuration vérifiée par relecture, lecture en rafale des 14 octets, conversions |
+| [`Core/Inc/imu.h`](firmware/IMU_Project/Core/Inc/imu.h) | Registres, valeurs de configuration nommées, facteurs de conversion, types `IMU_Raw_t` / `IMU_donne_t` / `IMU_milli_t`, prototypes |
+| [`Core/Src/app.c`](firmware/IMU_Project/Core/Src/app.c) | Application : lecture cadencée non bloquante (`HAL_GetTick`), compteurs de mesures et d'erreurs, LEDs d'état |
 | [`IMU_Project.ioc`](firmware/IMU_Project/IMU_Project.ioc) | Configuration CubeMX (broches, horloges, I2C1, EXTI2) |
 
 Choix de conception :
@@ -91,7 +91,12 @@ Choix de conception :
 - le bus I2C est **passé par pointeur** (`I2C_HandleTypeDef *bus`) au lieu d'être une variable globale `extern` : le pilote est réutilisable sur un autre bus ;
 - chaque pointeur reçu est vérifié (`NULL`), chaque appel HAL a son **code de retour propagé** ;
 - les variables internes du pilote sont `static` et lues par des accesseurs (`IMU_GetWhoAmI()`) ;
-- les 7 mesures sont lues en **une seule transaction** de 14 octets (auto-incrément du capteur), donc toutes au même instant.
+- les 7 mesures sont lues en **une seule transaction** de 14 octets (auto-incrément du capteur), donc toutes au même instant ;
+- la configuration est un **tableau `{registre, valeur}`** appliqué par une boucle, chaque écriture étant **relue et vérifiée** ;
+- un **reset logiciel** du capteur au démarrage garantit un état connu même après un reset de la carte seule ;
+- trois niveaux de données : brut (`int16_t`), unités physiques (`float`), entiers ×1000 (`int32_t`) lisibles directement au débogueur et prêts pour l'envoi USB ;
+- cadencement **non bloquant** par `HAL_GetTick()` au lieu de `HAL_Delay()` ;
+- diagnostic par LEDs : verte = mesures OK, rouge fixe = capteur absent, rouge clignotante = erreurs de lecture, orange = erreur fatale (`Error_Handler`).
 
 ## Configuration du capteur
 
@@ -128,7 +133,7 @@ Les trames décodées correspondent exactement au code d'initialisation : `AW:68
 
 ### Mesures brutes et converties
 
-Capteur à plat : `az ≈ 15 976` brut, soit **0,975 g** (gravité), et un biais du gyroscope de quelques °/s, à calibrer.
+Capteur à plat : `az ≈ 15 976` brut, soit **0,975 g** (gravité). Au repos, le gyroscope présente un biais d'environ 11 °/s sur l'axe Y, à corriger par calibration.
 
 ![Mesures converties dans le débogueur](docs/images/05_debug_mesures_converties.png)
 
@@ -158,7 +163,7 @@ Capteur à plat : `az ≈ 15 976` brut, soit **0,975 g** (gravité), et un biais
 1. Cloner le dépôt, puis dans STM32CubeIDE : **File → Import → Existing Projects into Workspace** et choisir `firmware/IMU_Project`.
 2. **Project → Build** (0 erreur, 0 avertissement).
 3. Brancher la carte (mini-USB, côté ST-LINK), puis **Run** ou **Debug**.
-4. Dans *Live Expressions*, ajouter `imu_raw` et `imu_donne` pour suivre les mesures.
+4. Dans *Live Expressions*, ajouter `imu_milli` (mesures en mg, m°C, m°/s), `app_nb_mesures` et `app_nb_erreurs`.
 
 > Sur macOS Apple Silicon, le débogueur de CubeIDE peut afficher « No ST-LINK detected » si Rosetta 2 n'est pas installé (le composant `stlink-server` est compilé pour Intel). Solution : `softwareupdate --install-rosetta`.
 
